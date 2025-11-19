@@ -18,7 +18,7 @@ client = MongoClient(uri)
 db = client["USelection2024"] 
 
 # Nome del file dove salvare i risultati
-output_csv_file = "iocs_trovati_nuova_struttura.csv"
+output_csv_file = "iocs_found_Uselection2024.csv"
 
 # ============================================================
 # FASE 1: RACCOLTA INFORMAZIONI SUI GRUPPI (ADATTATA)
@@ -26,6 +26,7 @@ output_csv_file = "iocs_trovati_nuova_struttura.csv"
 print("Raccolgo informazioni su tutti i gruppi nel database (nuova struttura)...")
 
 groups_collection = db["entities"]
+
 group_info_map = {} # Un dizionario per mappare collection_name -> info del gruppo
 
 for group_doc in groups_collection.find({}):
@@ -117,14 +118,17 @@ print(f"\n\nAnalisi completata. Trovati in totale {len(all_found_iocs)} IoC cand
 # ============================================================
 # FASE 3: SALVATAGGIO DEI RISULTATI SU CSV
 # ============================================================
-# <<< NESSUNA MODIFICA NECESSARIA IN QUESTA FASE
+
 if all_found_iocs:
-    df = pd.DataFrame(all_found_iocs)
-    df.to_csv(output_csv_file, index=False, encoding='utf-8')
-    
+    df_all = pd.DataFrame(all_found_iocs)
+    print(f"Eseguo la deduplicazione basata su 'ioc_value'...")
+    df_unique = df_all.drop_duplicates(subset=['ioc_value'], keep='first')
+    print(f"Dopo la deduplicazione, rimangono {len(df_unique)} IoC UNICI da analizzare con OTX.")
+
+
+    # Salviamo il DataFrame in un file CSV
+    df_unique.to_csv(output_csv_file, index=False, encoding='utf-8')
     print(f"Risultati salvati con successo nel file: {output_csv_file}")
-    print("\nPrime 5 righe del file CSV:")
-    print(df.head())
 else:
     print("Nessun IoC trovato, nessun file CSV è stato creato.")
 
