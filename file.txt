@@ -1,0 +1,10 @@
+TO DO:
+
+
+1. iocsearcher perche non trova, il nostro sì
+2. capire come il primo modello scarta, quale percentuale. rispetto ad iocsearcher e capire gli scenari 
+   (messaggi che vengono selezionati da una e non dall'altra) --> numericamente parlando io ne trovo alcuni e altri no 
+3. mettere il gruppo nome e id e il messaggio id (10 messaggi prima e dopo)
+3.1 come andiamo sulla categoria, per ogni topic quanti ne trovo e quanti malevoli
+4. privacy (hash)
+5. facciao confronto con distilBERT e securBERT
