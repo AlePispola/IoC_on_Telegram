@@ -17,3 +17,5 @@ TODO:
 5: capire le regole di wazuh e come si utilizza in real case scenario
 6: capire la fattibilità da dove partire per avere una pipeline realtime partendo da un gruppo fake (nostro) e avere soar + bot di telegram per 
 fare delle cose fike, il bot automaticamente legge il messaggio, lo passa alla pipeline e poi da capire.
+
+virustotal --> URL, IP, domain, hash
