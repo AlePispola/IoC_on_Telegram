@@ -8,3 +8,12 @@ TO DO:
 3.1 come andiamo sulla categoria, per ogni topic quanti ne trovo e quanti malevoli
 4. privacy (hash)
 5. facciao confronto con distilBERT e securBERT
+
+TODO:
+1: rifare il procedimento iocsearcher + regex + virustotal con distil e secure e capire se iocsearcher non funziona ed eventualmente commentare
+2: dato il db con gli ioc malevoli capire varie metriche (e.g., quanti ioc trovati, quanti per topic, etc.)
+3: alla fine le differenze tra secure e distil
+4: capire bene come una volta ottenuti gli ioc quelli veri come lavorare con i log e wazuh
+5: capire le regole di wazuh e come si utilizza in real case scenario
+6: capire la fattibilità da dove partire per avere una pipeline realtime partendo da un gruppo fake (nostro) e avere soar + bot di telegram per 
+fare delle cose fike, il bot automaticamente legge il messaggio, lo passa alla pipeline e poi da capire.
