@@ -109,13 +109,13 @@ plt.show()
 # --- METRIC 5: Top Offenders (Groups) ---
 print_header("5. Top 10 Telegram Groups for Confirmed Malware")
 # Filter confirmed threats from combined dataset
-confirmed_threats = df_combined[df_combined['vt_malicious'] >= 2] # Use >=2 for "High Confidence" threats here
+confirmed_threats = df_combined[df_combined['vt_malicious'] > 0] 
 top_groups = confirmed_threats['chat_name'].value_counts().head(10).reset_index()
 top_groups.columns = ['Chat Name', 'Confirmed Malware Count']
 
 plt.figure(figsize=(10, 6))
 sns.barplot(data=top_groups, y='Chat Name', x='Confirmed Malware Count', palette='magma')
-plt.title("Top 10 Groups by Confirmed Threat Volume (VT >= 2)")
+plt.title("Top 10 Groups by Confirmed Threat Volume (VT > 0)")
 plt.xlabel("Number of Malicious IoCs")
 plt.tight_layout()
 plt.show()
