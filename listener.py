@@ -8,26 +8,27 @@ import logging
 import base64
 from datetime import datetime
 from telethon import TelegramClient, events
+from telethon.tl.types import Channel, Chat
 
 # ================= CONFIGURAZIONE =================
 
 # 1. TELEGRAM API (Prendile da my.telegram.org)
-API_ID = 12345678          # <--- INSERISCI QUI
-API_HASH = 'latuaapihash'  # <--- INSERISCI QUI
+API_ID = API_ID          # <--- INSERISCI QUI
+API_HASH = 'API_HASH'  # <--- INSERISCI QUI
 SESSION_NAME = 'sentinel_session'
 
 # 2. VIRUSTOTAL
-VT_API_KEY = "LA_TUA_VT_API_KEY"
+VT_API_KEY = "VT_APY_KEY"
 VT_THRESHOLD = 1  # Consideriamo malevolo se almeno X engine lo rilevano
 
 # 3. WAZUH LOG FILE (Dove scriviamo i risultati)
 # Assicurati che l'utente che lancia lo script abbia i permessi di scrittura qui
-OUTPUT_LOG_FILE = "/var/log/wazuh_feed.json"
+OUTPUT_LOG_FILE = r"C:\Logs\virustotal_results.json"
 
 # 4. TARGETS
 # Puoi mettere i nomi dei canali o gli ID interi.
 # Se lasci vuoto [], ascolterà tutte le chat dove l'account è presente (SCONSIGLIATO per il rumore)
-TARGET_CHATS = ['Hacking Realm', 'Cyber Security Experts'] 
+TARGET_CHATS = ['Project_DPA'] 
 
 # ================= LOGGING SETUP =================
 logging.basicConfig(format='[%(levelname)s] %(asctime)s - %(message)s', level=logging.INFO)
@@ -142,8 +143,29 @@ async def handler(event):
     chat = await event.get_chat()
     
     sender_id = sender.id if sender else 0
-    chat_id = chat.id if chat else 0
+
+    raw_chat_id = chat.id if chat else 0
     chat_title = chat.title if hasattr(chat, 'title') else "Private"
+    
+    # --- CORREZIONE ID PER BOT API ---
+    # Telethon restituisce ID positivi per i canali/supergruppi.
+    # L'API Bot vuole il prefisso -100.
+    chat_id_for_bot = raw_chat_id
+    
+    # Se è un Canale o un Supergruppo (Megagroup)
+    if isinstance(chat, Channel):
+        # Concateniamo -100 davanti all'ID
+        chat_id_for_bot = int(f"-100{raw_chat_id}")
+        logger.info(f"🔧 ID Convertito per Bot API: {raw_chat_id} -> {chat_id_for_bot}")
+        
+    # Se è un Gruppo legacy (raro ormai, ma possibile)
+    elif isinstance(chat, Chat):
+        # I gruppi legacy hanno ID negativo
+        chat_id_for_bot = -raw_chat_id
+        
+    # Se è una chat privata, l'ID resta positivo (nessuna modifica)
+    # -----------------------------------
+
     text = event.raw_text
 
     logger.info(f"📩 Nuovo messaggio da {chat_title} (ID: {sender_id})")
@@ -152,7 +174,7 @@ async def handler(event):
     iocs = extract_iocs(text)
     
     if not iocs:
-        return # Nessun IoC trovato, ignoriamo il messaggio
+        return 
 
     logger.info(f"🔎 Trovati {len(iocs)} IoC. Avvio scansione...")
 
@@ -161,26 +183,23 @@ async def handler(event):
         vt_result = check_virustotal(ioc)
         
         if not vt_result:
-            continue # Errore o Rate Limit
+            continue 
             
         is_malicious = vt_result['malicious'] >= VT_THRESHOLD
         
-        # Logghiamo in console cosa sta succedendo
         if is_malicious:
             logger.warning(f"🚨 RILEVATO MALEVOLO: {ioc} ({vt_result['malicious']}/{vt_result['total']})")
         else:
             logger.info(f"clean: {ioc}")
 
         # --- FASE 3: SCRITTURA JSON PER WAZUH ---
-        # Scriviamo SOLO se c'è un risultato valido.
-        # Wazuh leggerà questo JSON.
         log_payload = {
             "timestamp": datetime.now().isoformat(),
-            "event_type": "telegram_sentinel", # Tag utile per le regole Wazuh
+            "integration_source": "telegram_sentinel", 
             "source_chat": chat_title,
-            "chat_id": chat_id,
+            "chat_id": chat_id_for_bot,  # <--- QUI USIAMO L'ID CORRETTO
             "author_id": sender_id,
-            "message_snippet": text[:50], # Salviamo solo l'inizio per privacy/spazio
+            "message_snippet": text[:50], 
             "ioc": ioc,
             "ioc_type": "url" if ioc.startswith("http") else "ip",
             "virustotal": {
@@ -191,8 +210,6 @@ async def handler(event):
         }
         
         save_to_wazuh(log_payload)
-        
-        # Piccola pausa per non intasare le API se ci sono 10 IP in un messaggio
         time.sleep(1)
 
 # ================= AVVIO =================
