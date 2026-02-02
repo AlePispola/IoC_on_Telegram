@@ -1,0 +1,12 @@
+services:
+  sentinel-bot:
+    build: .
+    container_name: sentinel_bot
+    restart: always
+    env_file:
+      - .env
+    environment:
+      - TARGET_CHATS=Project_DPA
+    volumes:
+      - ./logs:/app/logs         
+      - ./session:/app/session   

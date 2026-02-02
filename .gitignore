@@ -11,3 +11,5 @@ CTI_DATASET.csv
 ENRICHED_IOC_DATASET.csv
 csv_final/SECUREBERT_ENRICHED_IOC_DATASET.csv
 *.csv
+logs
+session
