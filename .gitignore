@@ -13,3 +13,5 @@ csv_final/SECUREBERT_ENRICHED_IOC_DATASET.csv
 *.csv
 logs
 session
+BIN/
+TODO.txt

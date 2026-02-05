@@ -10,16 +10,16 @@ from datetime import datetime
 from telethon import TelegramClient, events
 from telethon.tl.types import Channel, Chat
 
-# ================= CONFIGURAZIONE ENV =================
-# Leggiamo le configurazioni dalle Variabili d'Ambiente di Docker
+# ================= ENVIRONMENT CONFIGURATION =================
+# Reading configurations from Docker Environment Variables
 API_ID = int(os.getenv('TG_API_ID', '00000'))
 API_HASH = os.getenv('TG_API_HASH', '')
-SESSION_NAME = '/app/session/sentinel_session' # Percorso persistente
+SESSION_NAME = '/app/session/sentinel_session' # Persistent path
 
 VT_API_KEY = os.getenv('VT_API_KEY', '')
 VT_THRESHOLD = int(os.getenv('VT_THRESHOLD', '1'))
 
-# Percorso Linux interno al container
+# Internal container path for log forwarding
 OUTPUT_LOG_FILE = "/app/logs/virustotal_results.json"
 
 TARGET_CHATS = os.getenv('TARGET_CHATS', 'Project_DPA').split(',')
@@ -28,30 +28,31 @@ TARGET_CHATS = os.getenv('TARGET_CHATS', 'Project_DPA').split(',')
 logging.basicConfig(format='[%(levelname)s] %(asctime)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger("Sentinel")
 
-# ================= CACHE (Per non sprecare API) =================
-# Struttura: { "1.1.1.1": {"malicious": 0, "time": 1715000000} }
+# ================= CACHE (API Quota Optimization) =================
+# Structure: { "1.1.1.1": {"data": {...}, "time": 1715000000} }
 vt_cache = {}
-CACHE_DURATION = 3600 * 24  # 24 ore di memoria
+CACHE_DURATION = 3600 * 24  # 24-hour retention
 
-# ================= FUNZIONI PIPELINE =================
+# ================= PIPELINE FUNCTIONS =================
 
 def extract_iocs(text):
     """
-    Step 1: Estrazione. Trova IP e URL nel testo.
+    Step 1: Extraction. Identifies IP addresses and URLs within the text.
     """
     iocs = []
     
-    # Regex IP v4
+    # IPv4 Pattern
     ip_pattern = r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b'
     ips = re.findall(ip_pattern, text)
-    # Filtro base per IP locali/fake (es. 127.0.0.1)
+    
+    # Basic filtering for local/internal IPs (e.g., 127.0.0.1)
     valid_ips = [ip for ip in ips if not ip.startswith("127.") and not ip.startswith("192.168.")]
     
-    # Regex URL (Semplificata ma efficace)
+    # URL Pattern (Simplified but effective)
     url_pattern = r'(https?://[^\s]+)'
     urls = re.findall(url_pattern, text)
     
-    # Uniamo e rimuoviamo duplicati
+    # Merge and deduplicate
     for item in valid_ips + urls:
         if item not in iocs:
             iocs.append(item)
@@ -60,23 +61,22 @@ def extract_iocs(text):
 
 def check_virustotal(ioc):
     """
-    Step 2: Enrichment. Controlla su VT se l'IoC è pericoloso.
-    Gestisce Cache e Rate Limit.
+    Step 2: Enrichment. Consults VirusTotal API for threat reputation.
+    Handles caching and rate limiting.
     """
-    # 1. Controllo Cache
+    # 1. Cache Check
     current_time = time.time()
     if ioc in vt_cache:
         cached_data = vt_cache[ioc]
-        # Se il dato è fresco (meno di 24h), usalo
         if (current_time - cached_data['time']) < CACHE_DURATION:
-            logger.info(f"♻️ Cache Hit per {ioc}")
+            logger.info(f"♻️ Cache Hit for {ioc}")
             return cached_data['data']
 
-    # 2. Preparazione Request
+    # 2. Request Preparation
     ioc_type = "ip_addresses"
     endpoint = ioc
     
-    # Se è un URL, va codificato in base64
+    # URLs must be base64 encoded for the VT v3 API
     if ioc.startswith("http"):
         ioc_type = "urls"
         endpoint = base64.urlsafe_b64encode(ioc.encode()).decode().strip("=")
@@ -95,34 +95,34 @@ def check_virustotal(ioc):
                 "link": response.json()['data']['links']['self']
             }
             
-            # Salva in Cache
+            # Store in Cache
             vt_cache[ioc] = {"data": result, "time": current_time}
             return result
             
         elif response.status_code == 429:
-            logger.warning("⏳ Quota VT superata. Salto questo IoC.")
+            logger.warning("⏳ VT Quota exceeded. Skipping this IoC.")
             return None
         elif response.status_code == 404:
-            # Non trovato = Probabilmente pulito o nuovo
+            # Not found usually implies clean or unknown/new
             return {"malicious": 0, "total": 0, "link": "N/A"}
         else:
-            logger.error(f"Errore VT {response.status_code}")
+            logger.error(f"VT API Error {response.status_code}")
             return None
 
     except Exception as e:
-        logger.error(f"Eccezione VT: {e}")
+        logger.error(f"VT Exception: {e}")
         return None
 
 def save_to_wazuh(event_data):
     """
-    Step 3: Output. Scrive il JSON su una singola riga (NDJSON).
+    Step 3: Output. Writes the event as a single-line JSON (NDJSON) for Wazuh monitoring.
     """
     try:
         with open(OUTPUT_LOG_FILE, 'a') as f:
             f.write(json.dumps(event_data) + "\n")
-        logger.info(f"✅ Evento scritto su {OUTPUT_LOG_FILE}")
+        logger.info(f"✅ Event logged to {OUTPUT_LOG_FILE}")
     except Exception as e:
-        logger.error(f"❌ Impossibile scrivere su file log: {e}")
+        logger.error(f"❌ Failed to write to log file: {e}")
 
 # ================= MAIN LISTENER =================
 
@@ -131,48 +131,41 @@ client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
 @client.on(events.NewMessage(chats=TARGET_CHATS if TARGET_CHATS else None))
 async def handler(event):
     """
-    Questa funzione viene eseguita per OGNI nuovo messaggio ricevuto.
+    Triggers on every new message received in monitored chats.
     """
     sender = await event.get_sender()
     chat = await event.get_chat()
     
     sender_id = sender.id if sender else 0
-
     raw_chat_id = chat.id if chat else 0
     chat_title = chat.title if hasattr(chat, 'title') else "Private"
     
-    # --- CORREZIONE ID PER BOT API ---
-    # Telethon restituisce ID positivi per i canali/supergruppi.
-    # L'API Bot vuole il prefisso -100.
+    # --- CHAT ID CONVERSION FOR BOT API COMPATIBILITY ---
+    # Telethon returns positive IDs for channels/supergroups.
+    # The Bot API requires the -100 prefix for these entities.
     chat_id_for_bot = raw_chat_id
     
-    # Se è un Canale o un Supergruppo (Megagroup)
     if isinstance(chat, Channel):
-        # Concateniamo -100 davanti all'ID
         chat_id_for_bot = int(f"-100{raw_chat_id}")
-        logger.info(f"🔧 ID Convertito per Bot API: {raw_chat_id} -> {chat_id_for_bot}")
+        logger.info(f"🔧 ID Converted for Bot API: {raw_chat_id} -> {chat_id_for_bot}")
         
-    # Se è un Gruppo legacy (raro ormai, ma possibile)
     elif isinstance(chat, Chat):
-        # I gruppi legacy hanno ID negativo
+        # Legacy groups already use negative IDs
         chat_id_for_bot = -raw_chat_id
-        
-    # Se è una chat privata, l'ID resta positivo (nessuna modifica)
-    # -----------------------------------
+    # ----------------------------------------------------
 
     text = event.raw_text
+    logger.info(f"📩 New message from {chat_title} (Sender ID: {sender_id})")
 
-    logger.info(f"📩 Nuovo messaggio da {chat_title} (ID: {sender_id})")
-
-    # --- FASE 1: PIPELINE ESTRAZIONE ---
+    # --- PHASE 1: EXTRACTION ---
     iocs = extract_iocs(text)
     
     if not iocs:
         return 
 
-    logger.info(f"🔎 Trovati {len(iocs)} IoC. Avvio scansione...")
+    logger.info(f"🔎 Found {len(iocs)} IoCs. Starting scan...")
 
-    # --- FASE 2: ENRICHMENT (VirusTotal) ---
+    # --- PHASE 2: ENRICHMENT (VirusTotal) ---
     for ioc in iocs:
         vt_result = check_virustotal(ioc)
         
@@ -182,16 +175,16 @@ async def handler(event):
         is_malicious = vt_result['malicious'] >= VT_THRESHOLD
         
         if is_malicious:
-            logger.warning(f"🚨 RILEVATO MALEVOLO: {ioc} ({vt_result['malicious']}/{vt_result['total']})")
+            logger.warning(f"🚨 MALICIOUS DETECTED: {ioc} ({vt_result['malicious']}/{vt_result['total']})")
         else:
-            logger.info(f"clean: {ioc}")
+            logger.info(f"Clean: {ioc}")
 
-        # --- FASE 3: SCRITTURA JSON PER WAZUH ---
+        # --- PHASE 3: LOG GENERATION FOR WAZUH ---
         log_payload = {
             "timestamp": datetime.now().isoformat(),
             "integration_source": "telegram_sentinel", 
             "source_chat": chat_title,
-            "chat_id": chat_id_for_bot,  # <--- QUI USIAMO L'ID CORRETTO
+            "chat_id": chat_id_for_bot,
             "author_id": sender_id,
             "message_snippet": text[:50], 
             "ioc": ioc,
@@ -206,22 +199,22 @@ async def handler(event):
         save_to_wazuh(log_payload)
         time.sleep(1)
 
-# ================= AVVIO =================
+# ================= EXECUTION START =================
 if __name__ == '__main__':
     print(f"""
-    🤖 SENTINEL BOT AVVIATO
+    🤖 SENTINEL BOT STARTED
     -----------------------
     📂 Log Output: {OUTPUT_LOG_FILE}
-    🎯 Target Chats: {TARGET_CHATS if TARGET_CHATS else "TUTTE"}
-    🔑 VT Api Key: {'CARICATA' if VT_API_KEY else 'MANCANTE'}
+    🎯 Target Chats: {TARGET_CHATS if TARGET_CHATS else "ALL"}
+    🔑 VT Api Key: {'LOADED' if VT_API_KEY else 'MISSING'}
     -----------------------
-    In attesa di messaggi... (Premi Ctrl+C per fermare)
+    Listening for messages... (Press Ctrl+C to stop)
     """)
     
-    # Assicuriamoci che il file di log esista e sia scrivibile
+    # Ensure log file exists and is writable for the Wazuh agent
     if not os.path.exists(OUTPUT_LOG_FILE):
         open(OUTPUT_LOG_FILE, 'a').close()
-        os.chmod(OUTPUT_LOG_FILE, 0o666) # Permessi rw per tutti (per evitare problemi con wazuh-agent)
+        os.chmod(OUTPUT_LOG_FILE, 0o666)
 
     client.start()
     client.run_until_disconnected()
