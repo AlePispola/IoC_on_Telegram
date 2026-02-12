@@ -13,7 +13,7 @@ from telethon.tl.types import Channel, Chat
 # ================= CONFIGURATION =================
 
 # 1. TELEGRAM API (Obtain these from my.telegram.org)
-API_ID = API_ID          
+API_ID = 1234          
 API_HASH = 'API_HASH'  
 SESSION_NAME = 'sentinel_session'
 
