@@ -25,6 +25,7 @@ Based on the project organization, here is the directory map:
 * **`metrics/`**: Visualizations and figures generated during the research phase (Heatmaps, Overlap counts).
 * **`BOT_Telegram/Telegram_Listener/`**: The core bot logic (`bot_listener.py`) and Docker configuration for deployment.
 * **`BOT_Telegram/Wazuh/`**: Scripts for Wazuh integration, including the automated executor for banning users.
+* **`Telegram_Project`**: Complete Report about the project.  
 
 
 ## 🛠️ Technical Workflow
